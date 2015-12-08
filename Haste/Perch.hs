@@ -14,7 +14,7 @@
 -----------------------------------------------------------------------------
 {-#LANGUAGE CPP, ForeignFunctionInterface, TypeSynonymInstances, FlexibleInstances
             , OverloadedStrings, DeriveDataTypeable, UndecidableInstances
-            , OverlappingInstances #-}
+            , OverlappingInstances, InstanceSigs #-}
 module Haste.Perch where
 import Data.Typeable
 import Haste hiding (Attribute)
@@ -28,6 +28,8 @@ import Data.String
 import Control.Monad.IO.Class
 import Control.Applicative
 
+import Prelude hiding (div, span)
+
 
 newtype PerchM m a = Perch {build :: Elem -> m Elem} deriving Typeable
 
@@ -39,6 +41,11 @@ instance Monad m => Monoid (PerchM m a) where
          build my e
          return e
     mempty  = Perch return
+
+(<**) :: Monad m => Perch m -> Perch m -> Perch m
+(<**) parp childp = Perch $ \e -> do
+    par <- build parp e
+    build childp par
 
 instance Functor (PerchM m)
 instance Applicative (PerchM m)
@@ -59,7 +66,7 @@ class ToElem a where
 
 instance ToElem String where
    toElem s= Perch $ \e -> do
-        e' <- liftIO $ newTextElem s
+        e' <- newTextElem s
         addChild e' e
         return e'
 
@@ -67,6 +74,7 @@ instance Show a => ToElem a where toElem = toElem . show
 
 instance (MonadIO m) => ToElem (PerchM m a) where toElem e = unsafeCoerce e
 
+attr :: MonadIO m => PerchM m a1 -> (PropID, String) -> PerchM m a
 attr tag (n, v)=Perch $ \e -> do
         tag' <- build tag e
         setAttr tag' n v
@@ -74,8 +82,8 @@ attr tag (n, v)=Perch $ \e -> do
 
 nelem :: MonadIO m => String -> Perch m
 nelem s= Perch $ \e ->do
-        e' <- newElem s
-        addChild e' e
+        e' <- liftIO $ (newElem s :: IO Elem)
+        liftIO $ (addChild e' e :: IO ())
         return e'
 
 child :: (MonadIO m, ToElem a) => Perch m -> a -> Perch m
@@ -95,7 +103,7 @@ setHtml me text= Perch $ \e' -> do
   inner e txt = setProp e "innerHTML" txt
 
 -- | create an element and add a Haste event handler to it.
---addEvent :: Perch -> Event IO a -> a -> Perch
+addEvent :: (MonadEvent m, Event evt) => Perch m -> evt -> (EventData evt -> m ()) -> Perch m
 addEvent be event action= Perch $ \e -> do
      e' <- build be e
      let atr= fromJSStr $ eventName event
@@ -193,7 +201,13 @@ dd cont = nelem  "dd" `child` cont
 del cont = nelem  "del" `child` cont
 details cont = nelem  "details" `child` cont
 dfn cont = nelem  "dfn" `child` cont
+
+div :: (MonadIO m, ToElem a) => a -> Perch m
 div cont = nelem  "div" `child` cont
+
+div_ :: (MonadIO m) => Perch m
+div_ = div (mempty :: String)
+
 dl cont = nelem  "dl" `child` cont
 dt cont = nelem  "dt" `child` cont
 em cont = nelem  "em" `child` cont
@@ -242,7 +256,13 @@ script cont = nelem  "script" `child` cont
 section cont = nelem  "section" `child` cont
 select cont = nelem  "select" `child` cont
 small cont = nelem  "small" `child` cont
+
+span :: (MonadIO m, ToElem a) => a -> Perch m
 span cont = nelem  "span" `child` cont
+
+span_ :: (MonadIO m) => Perch m
+span_ = span ("" :: String)
+
 strong cont = nelem  "strong" `child` cont
 {-style cont = nelem  "style" `child` cont-}
 sub cont = nelem  "sub" `child` cont
@@ -277,6 +297,7 @@ class Attributable h where
  (!) :: h -> Attribute -> h
 
 instance (MonadIO m, ToElem a) => Attributable (a -> Perch m) where
+ (!) :: (MonadIO m, ToElem a) => (a -> Perch m) -> Attribute -> (a -> Perch m)
  (!) pe atrib = \e -> pe e `attr` atrib
 
 instance MonadIO m => Attributable (Perch m) where
