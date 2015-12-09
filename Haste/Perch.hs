@@ -232,7 +232,13 @@ ins cont = nelem  "ins" `child` cont
 kbd cont = nelem  "kbd" `child` cont
 label cont = nelem  "label" `child` cont
 legend cont = nelem  "legend" `child` cont
+
+li :: (MonadIO m, ToElem a) => a -> Perch m
 li cont = nelem  "li" `child` cont
+
+li_ :: (MonadIO m) => Perch m
+li_ = li ("" :: String)
+
 map cont = nelem  "map" `child` cont
 mark cont = nelem  "mark" `child` cont
 menu cont = nelem  "menu" `child` cont
